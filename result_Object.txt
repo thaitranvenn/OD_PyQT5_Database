@@ -1,19 +1,6 @@
-traffic light 0.25
-horse 0.26
-car 0.37
-car 0.43
-person 0.45
-car 0.45
-person 0.52
-truck 0.55
-truck 0.56
-traffic light 0.58
-person 0.61
-traffic light 0.75
-truck 0.80
-person 0.82
-car 0.84
-car 0.88
-fire hydrant 0.89
-person 0.89
+person 0.71
+person 0.90
+person 0.92
+bus 0.93
+person 0.94
 

@@ -89,6 +89,7 @@ class Ui_MainWindow(QMainWindow):
         self.label.setScaledContents(True)
         self.label.setPixmap(picture)
 
+
     # This function is called for stopping the timer, reset all buttons, label and Default Picture
     def resetApplication(self):
         self.timerVideo.stop()
