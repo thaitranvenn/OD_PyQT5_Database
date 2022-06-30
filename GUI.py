@@ -4,11 +4,11 @@ import numpy as np
 import torch
 import random
 import torch.backends.cudnn as cudnn
-
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import pyqtSlot
 from PyQt5.QtWidgets import QMainWindow, QApplication, QMessageBox
 from PyQt5.uic import loadUi
+
 from models.experimental import attempt_load
 from utils.general import check_img_size, non_max_suppression, scale_coords
 from utils.datasets import letterbox
@@ -89,7 +89,6 @@ class Ui_MainWindow(QMainWindow):
         self.label.setScaledContents(True)
         self.label.setPixmap(picture)
 
-
     # This function is called for stopping the timer, reset all buttons, label and Default Picture
     def resetApplication(self):
         self.timerVideo.stop()
@@ -106,30 +105,30 @@ class Ui_MainWindow(QMainWindow):
     # This function is called for opening the image and processing the image
     def buttonOpenImage(self):
         print('\nOpening a image...\nPlease choose one!\n')
-        listOfName = []
         # Open the folder for choosing the image
-        imageName, _ = QtWidgets.QFileDialog.getOpenFileName(
+        inputImage, _ = QtWidgets.QFileDialog.getOpenFileName(
             self, "Open Image", "", "All Files(*);;*.jpg;;*.png")
-        if not imageName:
+        if not inputImage:
             return
         
-        image = cv2.imread(imageName)
-        showImage = image
+        image = cv2.imread(inputImage)
+        processedImage = image
         with torch.no_grad():
             image = letterbox(image, new_shape=self.opt.imgsz)[0]
-            # Convert
-            # BGR to RGB, to 3x416x416
+            # Convert BGR to RGB, to 3x416x416
+            # transpose(2,0,1) for HWC->CHW transformation
             image = image[:, :, ::-1].transpose(2, 0, 1)
             # Return a contiguous array (ndim >= 1) in memory
             image = np.ascontiguousarray(image)
             image = torch.from_numpy(image).to(self.device)
             image = image.half() if self.half else image.float()  # uint8 to fp16/32
             
-            # Tranfer 0 - 255 to 0.0 - 1.0
+            # Tranfer 0 - 255 to 0.0 - 1.0 to optimize speech
             image /= 255.0
             if image.ndimension() == 3:
                 image = image.unsqueeze(0)
-            # Inference
+            #print(image)
+            # Augmented inference
             prediction = self.model(image, augment=self.opt.augment)[0]
             # Apply Non max suppression to optimize the bounding box 
             prediction = non_max_suppression(prediction, self.opt.conf_thres, self.opt.iou_thres, 
@@ -137,30 +136,29 @@ class Ui_MainWindow(QMainWindow):
             inforObjects  = ""
 
             # Process objects detection in image
-            for i, det in enumerate(prediction):
-                if det is not None and len(det):
+            for i, detect in enumerate(prediction):
+                if detect is not None and len(detect):
                     # This is for rescale boxes from img_size to im0 size
-                    det[:, :4] = scale_coords(
-                        image.shape[2:], det[:, :4], showImage.shape).round()
+                    detect[:, :4] = scale_coords(
+                        image.shape[2:], detect[:, :4], processedImage.shape).round()
 
                     # Write results of objects to command line and file .txt
                     print("Name and exact scale of detected object:" )
-                    for *xyxy, conf, cls in reversed(det):
-                        label = '%s %.2f' % (self.names[int(cls)], conf)
+                    for *xyxy, confidence, indexObject in reversed(detect):
+                        label = '%s %.2f' % (self.names[int(indexObject)], confidence)
                         print("[INFO] :  ", label)
-                        listOfName.append(self.names[int(cls)])
 
                         # Get single information of the object
-                        inforObject = plot_one_box(xyxy, showImage, label=label,
-                                     color=self.colors[int(cls)], line_thickness=2)
-                        inforObjects = inforObjects + inforObject + "\n"
+                        inforObject = plot_one_box(xyxy, processedImage, label=label,
+                                     color=self.colors[int(indexObject)], line_thickness=2)
+                        inforObjects += inforObject + "\n"
                         with open('result_Object.txt', 'w') as f:
-                            f.write(inforObjects + '\n')        
+                            f.write(inforObjects + '\n')
         
         # Received results
-        cv2.imwrite('result_Image.jpg', showImage)
+        cv2.imwrite('result_Image.jpg', processedImage)
         self.textBrowser.setText(inforObjects)
-        self.result = cv2.cvtColor(showImage, cv2.COLOR_BGR2BGRA)
+        self.result = cv2.cvtColor(processedImage, cv2.COLOR_BGR2BGRA)
         self.result = cv2.resize(
             self.result, (640, 480), interpolation=cv2.INTER_AREA)
         self.showImage = QtGui.QImage(
@@ -171,13 +169,13 @@ class Ui_MainWindow(QMainWindow):
     def buttonOpenVideo(self):
         if not self.timerVideo.isActive():
             # Open the folder for choosing the video
-            videoName, _ = QtWidgets.QFileDialog.getOpenFileName(
+            inputVideo, _ = QtWidgets.QFileDialog.getOpenFileName(
                 self, "Open Video", "", "All Files(*);;*.mp4;;*.avi")
 
-            if not videoName:
+            if not inputVideo:
                 return
 
-            flag = self.capture.open(videoName)
+            flag = self.capture.open(inputVideo)
             if flag == False:
                 QtWidgets.QMessageBox.warning(
                     self, u"Warning", u"Failed to open video", defaultButton=QtWidgets.QMessageBox.Ok)
@@ -214,24 +212,23 @@ class Ui_MainWindow(QMainWindow):
     # This function is called for showing video frames, using for video and camera.
     def showVideoFrame(self):
         flag, image = self.capture.read()
-        listOfName = []
         if image is not None:
-            showImage = image
+            processedImage = image
             with torch.no_grad():
                 image = letterbox(image, new_shape=self.opt.imgsz)[0]
-                # Convert
-                # BGR to RGB, to 3x416x416
+                # Convert BGR to RGB, to 3x416x416
+                # transpose(2,0,1) for HWC->CHW transformation
                 image = image[:, :, ::-1].transpose(2, 0, 1)
                 # Return a contiguous array (ndim >= 1) in memory
                 image = np.ascontiguousarray(image)
                 image = torch.from_numpy(image).to(self.device)
                 image = image.half() if self.half else image.float()  # uint8 to fp16/32
                 
-                # Tranfer 0 - 255 to 0.0 - 1.0
+                # Tranfer 0 - 255 to 0.0 - 1.0 to optimize speech
                 image /= 255.0
                 if image.ndimension() == 3:
                     image = image.unsqueeze(0)
-                # Inference
+                # Augmented inference
                 prediction = self.model(image, augment=self.opt.augment)[0]
 
                 # Apply Non max suppression to optimize the bounding box 
@@ -241,33 +238,32 @@ class Ui_MainWindow(QMainWindow):
                 
                 # Process objects detection in image
                 # detections per image
-                for i, det in enumerate(prediction):
-                    if det is not None and len(det):
+                for i, detect in enumerate(prediction):
+                    if detect is not None and len(detect):
                         # This is for rescale boxes from img_size to im0 size
-                        det[:, :4] = scale_coords(
-                            image.shape[2:], det[:, :4], showImage.shape).round()
+                        detect[:, :4] = scale_coords(
+                            image.shape[2:], detect[:, :4], processedImage.shape).round()
                         
                         # Write results of objects to command line and file .txt
-                        for *xyxy, conf, cls in reversed(det):
-                            label = '%s %.2f' % (self.names[int(cls)], conf)
+                        for *xyxy, confidence, indexObject in reversed(detect):
+                            label = '%s %.2f' % (self.names[int(indexObject)], confidence)
                             print("[INFO] :  ", label)
-                            listOfName.append(self.names[int(cls)])
                             
                             # Get single information of the object
                             inforObject = plot_one_box(
-                                xyxy, showImage, label=label, color=self.colors[int(cls)], line_thickness=2)
-                            inforObjects = inforObjects + inforObject + "\n"
+                                xyxy, processedImage, label=label, color=self.colors[int(indexObject)], line_thickness=2)
+                            inforObjects += inforObject + "\n"
                             with open('result_Object.txt', 'w') as f:
                                 f.write(inforObjects + '\n')     
             
             # Received results
             self.textBrowser.setText(inforObjects)
-            self.output.write(showImage)
-            show = cv2.resize(showImage, (640, 480))
+            self.output.write(processedImage)
+            show = cv2.resize(processedImage, (640, 480))
             self.result = cv2.cvtColor(show, cv2.COLOR_BGR2RGB)
-            showImage = QtGui.QImage(self.result.data, self.result.shape[1], self.result.shape[0],
+            processedImage = QtGui.QImage(self.result.data, self.result.shape[1], self.result.shape[0],
                                      QtGui.QImage.Format_RGB888)
-            self.label.setPixmap(QtGui.QPixmap.fromImage(showImage))
+            self.label.setPixmap(QtGui.QPixmap.fromImage(processedImage))
         else:
             self.resetApplication()
 
