@@ -7,8 +7,6 @@ from GUI import Ui_MainWindow
 import mysql.connector
 
 # Public password account
-
-
 class skipWindow:
     windowMain = None
     windowLogin = None
